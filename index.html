@@ -126,7 +126,6 @@ function createFamilyBlock(rows=3){
       <button onclick="addRow(this)">행 추가</button>
       <button onclick="removeRow(this)">행 삭제</button>
     </div>
-    <h2 style="font-size: 10px; font-weight:5">시그널 스튜디오 광주이천점</h2>
   `;
   const tbody = container.querySelector("tbody");
   for(let i=0;i<rows;i++) tbody.appendChild(createRow(i+1));
@@ -282,6 +281,7 @@ window.onload = function(){
   createFamilyBlock(3); // 가족1, 초기 3행
   document.getElementById("familyButtons").style.display="none";
 };
+
 </script>
-</body>
+</body>    <h2 style="font-size: 10px; font-weight:5">시그널 스튜디오 광주이천점</h2>
 </html>
