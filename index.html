@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>가족 의상 사이즈 리스트</title>
+<style>
+body {font-family:"Noto Sans KR",sans-serif; margin:0; padding:20px; background:#f8f8f8;}
+.container {
+  max-width:1000px;
+  width:95%;
+  margin:auto;
+  background:#fff;
+  padding:20px;
+  border-radius:16px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+h2{text-align:center; margin-bottom:20px;}
+.top-buttons, .bottom-buttons {display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+button{padding:8px 12px; border:none; border-radius:8px; background:#007aff; color:white; cursor:pointer;}
+button:hover{background:#005fcc;}
+.table-wrapper {overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;}
+.table-wrapper::-webkit-scrollbar {display: none;}
+table{width: 100%; min-width: 900px; border-collapse:collapse; margin-top:10px; table-layout:fixed;}
+th,td{border:1px solid #ccc; text-align:center; padding:6px; word-wrap:break-word; min-height:30px;}
+th{background:#f2f2f2;}
+input, select, textarea{
+  width:100%; height:28px; padding:0 4px; border:1px solid #ccc;
+  border-radius:6px; font-size:13px; line-height:28px; box-sizing:border-box;
+}
+textarea{resize:none; height:auto;}
+.family-block{margin-bottom:15px; border:1px solid #ccc; padding:8px; border-radius:8px; background:#fafafa;}
+.family-title{font-weight:bold; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;}
+.family-controls-bottom{display:flex; justify-content:flex-end; gap:5px; margin-top:5px;}
+.hidden{display:none;}
+th:nth-child(1), td:nth-child(1){width:5%}    
+th:nth-child(2), td:nth-child(2){width:10%}   
+th:nth-child(3), td:nth-child(3){width:10%}    
+th:nth-child(4), td:nth-child(4){width:8%}    
+th:nth-child(5), td:nth-child(5){width:12%}   
+th:nth-child(6), td:nth-child(6){width:12%}   
+th:nth-child(7), td:nth-child(7){width:12%}   
+th:nth-child(8), td:nth-child(8){width:12%}   
+th:nth-child(9), td:nth-child(9){width:19.5%}
+</style>
+</head>
+<body>
+<div class="container" id="captureArea">
+  <h2>가족 의상 사이즈 리스트</h2>
+
+  <!-- formScreen (처음부터 단일 가족 모드 표시) -->
+  <div id="formScreen">
+    <div class="top-buttons">
+      <button onclick="captureClipboard()">캡처</button>
+      <button onclick="downloadImage()">이미지 저장</button>
+      <button onclick="confirmReset()">초기화</button>
+    </div>
+
+    <div id="familiesContainer"></div>
+
+    <div class="bottom-buttons" id="familyButtons" style="display:none;">
+      <button onclick="addFamily()">가족 추가</button>
+      <button onclick="removeFamily()">가족 삭제</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+const maleSizes = Array.from({length:7},(_,i)=>90+i*5);
+const femaleSizes = ['44','55','66','77','88','99'];
+const kidSizes = Array.from({length:7},(_,i)=>`키즈 ${90+i*10}`);
+// 기존 relations (여러가족 모드에서 사용 가능하지만 현재 초기/고정 모드는 단일)
+const relations = ['할아버지','할머니','아들','딸','사위','며느리','손자','손녀'];
+// 단일 모드에서 사용할 관계 옵션 (요청사항)
+const singleRelations = ['아빠','엄마','아들','딸'];
+
+let familyCount = 0;
+let mode = 'single'; // 항상 단일 모드로 초기화
+
+function createRow(index){
+  const tr=document.createElement("tr");
+
+  // 단일 모드 관계 옵션으로 고정 (아빠/엄마/아들/딸)
+  const relHtml = `<option value="">선택</option>` + singleRelations.map(r=>`<option value="${r}">${r}</option>`).join('');
+
+  tr.innerHTML=`
+    <td>${index}</td>
+    <td><select>${relHtml}</select></td>
+    <td>
+      <select onchange="updateSizes(this)">
+        <option value="">선택</option>
+        <option value="male">남성</option>
+        <option value="female">여성</option>
+        <option value="kid">키즈</option>
+      </select>
+    </td>
+    <td><input type="text" onblur="addCm(this)" onfocus="removeCm(this)"></td>
+    <td><select class="topSize"><option value="">선택</option></select></td>
+    <td><select class="bottomSize"><option value="">선택</option></select></td>
+    <td><select class="shoeSize"><option value="">선택</option></select></td>
+    <td><input type="checkbox"></td>
+    <td><textarea rows="1"></textarea></td>
+  `;
+  return tr;
+}
+
+function createFamilyBlock(rows=3){
+  familyCount++;
+  const container=document.createElement("div");
+  container.className="family-block";
+  const displayName = getFamilyName(familyCount);
+  container.innerHTML=`
+    <div class="family-title">${displayName}</div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>순번</th><th>관계</th><th>성별</th><th>키(cm)</th>
+            <th>상의</th><th>하의(inch)</th><th>신발</th><th>헤어·메이크업</th><th>기타</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="family-controls-bottom">
+      <button onclick="addRow(this)">행 추가</button>
+      <button onclick="removeRow(this)">행 삭제</button>
+    </div>
+  `;
+  const tbody = container.querySelector("tbody");
+  for(let i=0;i<rows;i++) tbody.appendChild(createRow(i+1));
+  document.getElementById("familiesContainer").appendChild(container);
+  updateFamilyNames();
+}
+
+function getFamilyName(count){
+  // 단일 모드: 가족1, 가족2, ...
+  return `가족${count}`;
+}
+
+function updateFamilyNames(){
+  const families=document.querySelectorAll(".family-block");
+  families.forEach((block,i)=>{
+    const count = i+1;
+    block.querySelector(".family-title").textContent = getFamilyName(count);
+  });
+}
+
+function addRow(button){
+  const tbody = button.closest(".family-block").querySelector("tbody");
+  const index = tbody.children.length + 1;
+  tbody.appendChild(createRow(index));
+}
+function removeRow(button){
+  const tbody = button.closest(".family-block").querySelector("tbody");
+  if(tbody.children.length>0){
+    tbody.removeChild(tbody.lastChild);
+    Array.from(tbody.children).forEach((tr,i)=>tr.children[0].textContent=i+1);
+  }
+}
+function addFamily(){createFamilyBlock(3);}
+function removeFamily(){
+  const c=document.getElementById("familiesContainer");
+  if(c.lastChild){c.removeChild(c.lastChild);}
+  updateFamilyNames();
+}
+function addCm(input){let val=input.value.replace(/[^0-9]/g,''); if(val) input.value=val+'cm';}
+function removeCm(input){input.value=input.value.replace(/[^0-9]/g,'');}
+
+function updateSizes(select){
+  const row = select.closest("tr");
+  const top = row.querySelector(".topSize");
+  const bottom = row.querySelector(".bottomSize");
+  const shoe = row.querySelector(".shoeSize");
+
+  top.innerHTML = '<option value="">선택</option>';
+  let topSizes = [];
+  if(select.value==='male') topSizes = maleSizes;
+  else if(select.value==='female') topSizes = femaleSizes;
+  else if(select.value==='kid') topSizes = kidSizes;
+  topSizes.forEach(s=>{
+    const opt = document.createElement('option'); opt.value=s; opt.textContent=s;
+    top.appendChild(opt);
+  });
+
+  bottom.innerHTML = '<option value="">선택</option>';
+  if(select.value==='male' || select.value==='female'){
+    for(let i=20;i<=40;i++){
+      const opt = document.createElement('option'); opt.value=i; opt.textContent=i;
+      bottom.appendChild(opt);
+    }
+  } else if(select.value==='kid'){
+    const opt = document.createElement('option'); opt.value="-"; opt.textContent="-";
+    bottom.appendChild(opt);
+  }
+
+  shoe.innerHTML = '<option value="">선택</option>';
+  for(let i=130;i<=300;i+=10){
+    const opt = document.createElement('option'); opt.value=i; opt.textContent=i;
+    shoe.appendChild(opt);
+  }
+}
+
+/* -------------------- 캡처 -------------------- */
+async function _expandForCapture(container){
+  const original={containerStyle:container.getAttribute('style'), bodyOverflow:document.body.style.overflow, scrollX:window.scrollX, scrollY:window.scrollY};
+  window.scrollTo(0,0);
+  container.style.minHeight = container.scrollHeight + "px";
+  const wrappers = container.querySelectorAll('.table-wrapper');
+  const wrappersOriginal = [];
+  wrappers.forEach(w=>{
+    wrappersOriginal.push(w.getAttribute('style'));
+    w.style.height = w.scrollHeight + "px";
+    w.style.overflow = "visible";
+  });
+  document.body.style.overflow = "hidden";
+  await new Promise(requestAnimationFrame);
+  return { original, wrappersOriginal };
+}
+function _restoreAfterCapture(container, saved){
+  if(saved.original.containerStyle === null) container.removeAttribute('style');
+  else container.setAttribute('style', saved.original.containerStyle);
+  const wrappers = container.querySelectorAll('.table-wrapper');
+  wrappers.forEach((w,i)=>{
+    if(saved.wrappersOriginal[i] === null) w.removeAttribute('style');
+    else w.setAttribute('style', saved.wrappersOriginal[i]);
+  });
+  document.body.style.overflow = saved.original.bodyOverflow || '';
+  window.scrollTo(saved.original.scrollX, saved.original.scrollY);
+}
+
+async function captureClipboard(){
+  const container=document.getElementById('captureArea');
+  const saved=await _expandForCapture(container);
+  const buttons=Array.from(document.querySelectorAll('button')); buttons.forEach(b=>b.style.visibility='hidden');
+  const familyBlocks=Array.from(document.querySelectorAll('.family-block'));
+  const originalStyles=familyBlocks.map(fb=>({background:fb.style.background,border:fb.style.border,marginBottom:fb.style.marginBottom}));
+  familyBlocks.forEach(fb=>{fb.style.background="#fff";fb.style.border="none";fb.style.marginBottom="5px";});
+  const canvas=await html2canvas(container,{scale:3,useCORS:true,backgroundColor:"#fff"});
+  familyBlocks.forEach((fb,i)=>{fb.style.background=originalStyles[i].background;fb.style.border=originalStyles[i].border;fb.style.marginBottom=originalStyles[i].marginBottom;});
+  buttons.forEach(b=>b.style.visibility='visible');
+  _restoreAfterCapture(container,saved);
+  const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+  try{
+    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+    alert('이미지 캡처 완료! [모바일은 캡처 불가] 이미지 저장을 선택해 주세요!');
+  }catch(e){
+    if(confirm('클립보드 저장이 불가능합니다. 다운로드 하시겠습니까?')){
+      const link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='의상정보.png'; link.click();
+    }
+  }
+}
+async function downloadImage(){
+  const container=document.getElementById('captureArea');
+  const saved=await _expandForCapture(container);
+  const buttons=Array.from(document.querySelectorAll('button')); buttons.forEach(b=>b.style.visibility='hidden');
+  const canvas=await html2canvas(container,{scale:3,useCORS:true,backgroundColor:"#fff"});
+  buttons.forEach(b=>b.style.visibility='visible');
+  _restoreAfterCapture(container,saved);
+  const link=document.createElement('a');
+  link.href=canvas.toDataURL('image/png');
+  link.download='의상정보.png';
+  link.click();
+}
+
+/* -------------------- 초기화 -------------------- */
+function confirmReset(){if(confirm("초기화하시겠습니까?")) resetToSingle();}
+function resetToSingle(){
+  document.getElementById("familiesContainer").innerHTML="";
+  familyCount=0;
+  // 항상 단일 모드의 가족1 상태로 초기화
+  createFamilyBlock(3);
+  // 가족 추가 버튼은 단일 모드이므로 숨김 (원본 단일 모드 동작 유지)
+  document.getElementById("familyButtons").style.display="none";
+}
+
+/* -------------------- 초기 로드 -------------------- */
+window.onload = function(){
+  // 단일 모드로 초기화: 가족1만 표시
+  familyCount = 0;
+  createFamilyBlock(3); // 가족1, 초기 3행
+  document.getElementById("familyButtons").style.display="none";
+};
+</script>
+</body>
+</html>
